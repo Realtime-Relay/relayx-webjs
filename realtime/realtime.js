@@ -15,8 +15,6 @@ export class Realtime {
     #event_func = {}; 
     #topicMap = []; 
 
-    #config = "CiAgICAgICAgLS0tLS1CRUdJTiBOQVRTIFVTRVIgSldULS0tLS0KICAgICAgICBKV1RfS0VZCiAgICAgICAgLS0tLS0tRU5EIE5BVFMgVVNFUiBKV1QtLS0tLS0KCiAgICAgICAgKioqKioqKioqKioqKioqKioqKioqKioqKiBJTVBPUlRBTlQgKioqKioqKioqKioqKioqKioqKioqKioqKgogICAgICAgIE5LRVkgU2VlZCBwcmludGVkIGJlbG93IGNhbiBiZSB1c2VkIHRvIHNpZ24gYW5kIHByb3ZlIGlkZW50aXR5LgogICAgICAgIE5LRVlzIGFyZSBzZW5zaXRpdmUgYW5kIHNob3VsZCBiZSB0cmVhdGVkIGFzIHNlY3JldHMuCgogICAgICAgIC0tLS0tQkVHSU4gVVNFUiBOS0VZIFNFRUQtLS0tLQogICAgICAgIFNFQ1JFVF9LRVkKICAgICAgICAtLS0tLS1FTkQgVVNFUiBOS0VZIFNFRUQtLS0tLS0KCiAgICAgICAgKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKgogICAgICAgIA=="
-
     // Status Codes
     #RECONNECTING = "RECONNECTING";
     #RECONNECTED = "RECONNECTED";
@@ -116,15 +114,15 @@ export class Realtime {
                 "nats://0.0.0.0:4423"
                 ] : 
                 [
-                    `wss://api2.relay-x.io:4421`,
-                    `wss://api2.relay-x.io:4422`,
-                    `wss://api2.relay-x.io:4423`
+                    `wss://api.relay-x.io:4421`,
+                    `wss://api.relay-x.io:4422`,
+                    `wss://api.relay-x.io:4423`
                 ];
         }else{
             this.#baseUrl = [
-                `wss://api2.relay-x.io:4421`,
-                `wss://api2.relay-x.io:4422`,
-                `wss://api2.relay-x.io:4423`
+                `wss://api.relay-x.io:4421`,
+                `wss://api.relay-x.io:4422`,
+                `wss://api.relay-x.io:4423`
             ];
         }
 
@@ -857,12 +855,20 @@ export class Realtime {
     }
 
     #getUserCreds(jwt, secret){
-        var template = Buffer.from(this.#config, "base64").toString("utf8")
+        return `
+-----BEGIN NATS USER JWT-----
+${jwt}
+------END NATS USER JWT------
 
-        var creds = template.replace("JWT_KEY", jwt);
-        creds = creds.replace("SECRET_KEY", secret)
+************************* IMPORTANT *************************
+NKEY Seed printed below can be used to sign and prove identity.
+NKEYs are sensitive and should be treated as secrets.
 
-        return creds
+-----BEGIN USER NKEY SEED-----
+${secret}
+------END USER NKEY SEED------
+
+*************************************************************`
     }
 
     // Exposure for tests
