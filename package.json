@@ -1,0 +1,34 @@
+{
+  "name": "relayx-webjs",
+  "version": "1.0.0",
+  "description": "A powerful library for integrating real-time communication into your webapps, powered by the Relay Network.",
+  "main": "realtime/realtime.js",
+  "type": "module",
+  "scripts": {
+    "test": "NODE_ENV=test node tests/test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Realtime-Relay/relayx-webjs.git"
+  },
+  "keywords": [
+    "realtime",
+    "realtime-communication",
+    "relay",
+    "relay-x",
+    "relayx-webjs"
+  ],
+  "author": "Relay",
+  "license": "Apache 2.0",
+  "bugs": {
+    "url": "https://github.com/Realtime-Relay/relayx-webjs/issues"
+  },
+  "homepage": "https://github.com/Realtime-Relay/relayx-webjs#readme",
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
+    "@nats-io/jetstream": "3.0.0-35",
+    "jest": "30.0.4",
+    "nats.ws": "1.30.3",
+    "uuid": "11.1.0"
+  }
+}
