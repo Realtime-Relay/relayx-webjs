@@ -1,5 +1,4 @@
 import { Realtime, CONNECTED, RECONNECT, DISCONNECTED, MESSAGE_RESEND } from "../realtime/realtime.js";
-import axios from "axios";
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 
@@ -8,8 +7,8 @@ let realTimeEnabled;
 before(async () => {
     // Start server for testing. Run local server!!
     realTimeEnabled = new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
     await realTimeEnabled.init(false, {
         debug: true
@@ -55,8 +54,8 @@ test("No creds in constructor", async () => {
 
 test('init() function test', async () => {
     var realtime =  new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
     await realtime.init(true);
 
@@ -148,8 +147,8 @@ test("Retry method test", async () => {
 
 test("get publish retry count test based in init()", async () => {
     var realtime =  new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
 
     await realtime.init({
@@ -271,8 +270,8 @@ test("Testing publish(topic, data) with invalid inputs", async () => {
 
 test("on() test", async () => {
     var realtime = new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
 
     await assert.rejects(async () => {
@@ -349,8 +348,8 @@ test("on() test", async () => {
 
 test("off() test", async () => {
     var realtime = new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
 
     await assert.rejects(async () => {
@@ -397,8 +396,8 @@ test("off() test", async () => {
 
 test("Get stream name test", () => {
     var realtime = new Realtime({
-        api_key: process.env.user_key,
-        secret: process.env.secret
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
     });
 
     realtime.namespace = "spacex-dragon-program"
@@ -449,7 +448,76 @@ test("Test isTopicValidMethod()", () => {
         assert.strictEqual(valid, false);
     });
 
-    var unreservedValidTopics = ["hello", "test-room", "heyyyyy", "room-connect"]; 
+    unreservedInvalidTopics = [
+        '$internal',          // starts with $
+        'hello world',        // space
+        'topic/',             // slash
+        'name?',              // ?
+        'foo#bar',            // #
+        'bar.baz!',           // !
+        ' space',             // leading space
+        'tab\tchar',          // tab
+        'line\nbreak',        // newline
+        'comma ,',            // space + comma
+        '',                   // empty string
+        'bad|pipe',           // |
+        'semi;colon',         // ;
+        'colon:here',         // :
+        "quote's",            // '
+        '"doublequote"',      // "
+        'brackets[]',         // []
+        'brace{}',            // {}
+        'paren()',            // ()
+        'plus+sign',          // +
+        'eq=val',             // =
+        'gt>lt<',             // < mixed with >
+        'percent%',           // %
+        'caret^',             // ^
+        'ampersand&',         // &
+        'back\\slash',        // backslash
+        '中文字符',            // non‑ASCII
+        '👍emoji',            // emoji
+        'foo\rbar',           // carriage return
+        'end '                // trailing space
+    ];
+        
+    unreservedInvalidTopics.forEach(topic => {
+        var valid = realTimeEnabled.isTopicValid(topic);
+        assert.strictEqual(valid, false);
+    });
+
+    var unreservedValidTopics = [
+        'Orders',
+        'customer_123',
+        'foo-bar',
+        'a,b,c',
+        '*',
+        'foo>*',
+        'hello$world',
+        'topic.123',
+        'ABC_def-ghi',
+        'data_stream_2025',
+        'NODE*',
+        'pubsub>events',
+        'log,metric,error',
+        'X123_Y456',
+        'multi.step.topic',
+        'batch-process',
+        'sensor1_data',
+        'finance$Q2',
+        'alpha,beta,gamma',
+        'Z9_Y8-X7',
+        'config>*',
+        'route-map',
+        'STATS_2025-07',
+        'msg_queue*',
+        'update>patch',
+        'pipeline_v2',
+        'FOO$BAR$BAZ',
+        'user.profile',
+        'id_001-xyz',
+        'event_queue>'
+    ]; 
 
     unreservedValidTopics.forEach(topic => {
         var valid = realTimeEnabled.isTopicValid(topic);
