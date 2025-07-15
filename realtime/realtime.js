@@ -734,7 +734,9 @@ export class Realtime {
             var arrayCheck = ![CONNECTED, DISCONNECTED, RECONNECT, this.#RECONNECTED,
                 this.#RECONNECTING, this.#RECONN_FAIL, MESSAGE_RESEND, SERVER_DISCONNECT].includes(topic);
 
-            var spaceStarCheck = !topic.includes(" ") && !topic.includes("*") && !topic.includes(".");
+            const TOPIC_REGEX = /^(?!\$)[A-Za-z0-9_,.*>\$-]+$/;
+
+            var spaceStarCheck = !topic.includes(" ") && TOPIC_REGEX.test(topic);
 
             return arrayCheck && spaceStarCheck;
         }else{
