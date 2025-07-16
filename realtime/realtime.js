@@ -11,6 +11,7 @@ export class Realtime {
     #codec = JSONCodec();
     #jetstream = null;
     #consumerMap = {};
+    #consumer = null;
 
     #event_func = {}; 
     #topicMap = []; 
@@ -223,7 +224,6 @@ export class Realtime {
                         this.#log(`client disconnected - ${s.data}`);
 
                         this.connected = false;
-                        this.#consumerMap = {};
 
                         if (DISCONNECTED in this.#event_func){
                             if (this.#event_func[DISCONNECTED] !== null || this.#event_func[DISCONNECTED] !== undefined){
@@ -282,12 +282,14 @@ export class Realtime {
     /**
      * Closes connection
      */
-    close(){
+    async close(){
         if(this.#natsClient !== null){
             this.reconnected = false;
             this.disconnected = true;
             
             this.#offlineMessageBuffer.length = 0;
+
+            await this.#deleteConsumer();
 
             this.#natsClient.close();
         }else{
@@ -299,10 +301,9 @@ export class Realtime {
      * Start consumers for topics initialized by user
      */
     async #subscribeToTopics(){
-        this.#topicMap.forEach(async (topic) => {
-            // Subscribe to stream
-            await this.#startConsumer(topic); 
-        });
+        if(this.#topicMap.length > 0){
+            await this.#startConsumer(); 
+        }
     }
 
     /**
@@ -323,8 +324,6 @@ export class Realtime {
         this.#topicMap = this.#topicMap.filter(item => item !== topic);
 
         delete this.#event_func[topic];
-
-        return await this.#deleteConsumer(topic);
     }
 
     /**
@@ -467,6 +466,10 @@ export class Realtime {
             throw new Error(`Expected $topic type -> string. Instead receieved -> ${typeof topic}`);
         }
 
+        if(!this.isTopicValid(topic)){
+            throw new Error("Invalid topic, use isTopicValid($topic) to validate topic")
+        }
+
         if(start == undefined || start == null){
             throw new Error(`$start must be provided. $start is => ${start}`)
         }
@@ -568,39 +571,49 @@ export class Realtime {
      * @param {string} topic 
      */
     async #startConsumer(topic){
+        if(this.#consumer != null){
+            return;
+        }
+
         this.#log(`Starting consumer for topic: ${topic}_${uuidv4()}`)
 
         var opts = { 
-            name: `${topic}_${uuidv4()}`,
-            filter_subjects: [this.#getStreamTopic(topic), this.#getStreamTopic(topic) + "_presence"],
+            name: `${uuidv4()}`,
+            filter_subjects: [this.#getStreamTopic(">")],
             replay_policy: ReplayPolicy.Instant,
             opt_start_time: new Date(),
             ack_policy: AckPolicy.Explicit,
             delivery_policy: DeliverPolicy.New
         }
 
-        const consumer = await this.#jetstream.consumers.get(this.#getStreamName(), opts);
+        this.#consumer = await this.#jetstream.consumers.get(this.#getStreamName(), opts);
         this.#log(this.#topicMap)
 
-        this.#consumerMap[topic] = consumer;
-
-        await consumer.consume({
+        await this.#consumer.consume({
             callback: async (msg) => {
                 try{
                     const now = Date.now();
                     this.#log("Decoding msgpack message...")
                     var data = decode(msg.data);
 
-                    var room = data.room;
+                    var room = this.#stripStreamHash(msg.subject);
 
                     this.#log(data);
 
                     // Push topic message to main thread
-                    if (room in this.#event_func && data.client_id != this.#getClientId()){
-                        this.#event_func[room]({
-                            "id": data.id,
-                            "data": data.message
-                        });
+                    if (data.client_id != this.#getClientId()){
+                        var topics = this.#getCallbackTopics(room);
+                        this.#log(topics)
+
+                        for(let i = 0; i < topics.length; i++){
+                            var top = topics[i];
+
+                            this.#event_func[top]({
+                                "id": data.id,
+                                "topic": room,
+                                "data": data.message
+                            });
+                        }
                     }
 
                     msg.ack();
@@ -608,7 +621,7 @@ export class Realtime {
                     await this.#logLatency(now, data);
                 }catch(err){
                     this.#log("Consumer err " + err);
-                    msg.nack(5000);
+                    msg.nak(5000);
                 }
             }
         });
@@ -619,18 +632,14 @@ export class Realtime {
      * Deletes consumer
      * @param {string} topic 
      */
-    async #deleteConsumer(topic){
-        const consumer = this.#consumerMap[topic]
-
+    async #deleteConsumer(){
         var del = false;
 
-        if (consumer != null && consumer != undefined){
-            del = await consumer.delete();
+        if (this.#consumer != null && this.#consumer != undefined){
+            del = await this.#consumer.delete();
         }else{
             del = false
         }
-
-        delete this.#consumerMap[topic];
 
         return del;
     }
@@ -734,7 +743,7 @@ export class Realtime {
             var arrayCheck = ![CONNECTED, DISCONNECTED, RECONNECT, this.#RECONNECTED,
                 this.#RECONNECTING, this.#RECONN_FAIL, MESSAGE_RESEND, SERVER_DISCONNECT].includes(topic);
 
-            const TOPIC_REGEX = /^(?!\$)[A-Za-z0-9_,.*>\$-]+$/;
+            const TOPIC_REGEX = /^(?!.*\$)(?:[A-Za-z0-9_*~-]+(?:\.[A-Za-z0-9_*~-]+)*(?:\.>)?|>)$/u;
 
             var spaceStarCheck = !topic.includes(" ") && TOPIC_REGEX.test(topic);
 
@@ -790,6 +799,91 @@ export class Realtime {
             throw new Error("$topicHash is null. Cannot initialize program with null $topicHash")
         }
     }
+
+    #stripStreamHash(topic){
+        return topic.replace(`${this.topicHash}.`, "")
+    }
+
+    #getCallbackTopics(topic){
+        var validTopics = [];
+
+        var topicPatterns = Object.keys(this.#event_func);
+
+        for(let i = 0; i < topicPatterns.length; i++){
+            var pattern = topicPatterns[i];
+
+            if([CONNECTED, RECONNECT, MESSAGE_RESEND, DISCONNECTED, SERVER_DISCONNECT].includes(pattern)){
+                continue;
+            }
+
+            var match = this.#topicPatternMatcher(pattern, topic);
+
+            if(match){
+                validTopics.push(pattern)
+            }
+        }
+
+        return validTopics;
+
+    }
+
+    #topicPatternMatcher(patternA, patternB) {
+        const a = patternA.split(".");
+        const b = patternB.split(".");
+
+        let i = 0, j = 0;          // cursors in a & b
+        let starAi = -1, starAj = -1; // last '>' position in A and the token count it has consumed
+        let starBi = -1, starBj = -1; // same for pattern B
+
+        while (i < a.length || j < b.length) {
+            const tokA = a[i];
+            const tokB = b[j];
+
+            /*──────────── literal match or single‑token wildcard on either side ────────────*/
+            const singleWildcard =
+            (tokA === "*" && j < b.length) ||
+            (tokB === "*" && i < a.length);
+
+            if (
+            (tokA !== undefined && tokA === tokB) ||
+            singleWildcard
+            ) {
+            i++; j++;
+            continue;
+            }
+
+            /*────────────────── multi‑token wildcard ">" — must be **final** ───────────────*/
+            if (tokA === ">") {
+            if (i !== a.length - 1) return false;   // '>' not in last position → invalid
+            if (j >= b.length)      return false;   // must consume at least one token
+            starAi = i++;                       // remember where '>' is
+            starAj = ++j;                       // gobble one token from B
+            continue;
+            }
+            if (tokB === ">") {
+            if (j !== b.length - 1) return false;   // same rule for patternB
+            if (i >= a.length)      return false;
+            starBi = j++;
+            starBj = ++i;
+            continue;
+            }
+
+            /*───────────────────────────── back‑track using last '>' ───────────────────────*/
+            if (starAi !== -1) {          // let patternA's '>' absorb one more token of B
+            j = ++starAj;
+            continue;
+            }
+            if (starBi !== -1) {          // let patternB's '>' absorb one more token of A
+            i = ++starBj;
+            continue;
+            }
+
+            /*────────────────────────────────── dead‑end ───────────────────────────────────*/
+            return false;
+        }
+
+        return true; 
+    } 
 
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -927,6 +1021,14 @@ ${secret}
             return this.#consumerMap
         }else{
             return null; 
+        }
+    }
+
+    testPatternMatcher(){
+        if(process.env.NODE_ENV == "test"){
+            return this.#topicPatternMatcher.bind(this)
+        }else{
+            return null;
         }
     }
 }

@@ -449,36 +449,38 @@ test("Test isTopicValidMethod()", () => {
     });
 
     unreservedInvalidTopics = [
-        '$internal',          // starts with $
-        'hello world',        // space
-        'topic/',             // slash
-        'name?',              // ?
-        'foo#bar',            // #
-        'bar.baz!',           // !
-        ' space',             // leading space
-        'tab\tchar',          // tab
-        'line\nbreak',        // newline
-        'comma ,',            // space + comma
-        '',                   // empty string
-        'bad|pipe',           // |
-        'semi;colon',         // ;
-        'colon:here',         // :
-        "quote's",            // '
-        '"doublequote"',      // "
-        'brackets[]',         // []
-        'brace{}',            // {}
-        'paren()',            // ()
-        'plus+sign',          // +
-        'eq=val',             // =
-        'gt>lt<',             // < mixed with >
-        'percent%',           // %
-        'caret^',             // ^
-        'ampersand&',         // &
-        'back\\slash',        // backslash
-        '中文字符',            // non‑ASCII
-        '👍emoji',            // emoji
-        'foo\rbar',           // carriage return
-        'end '                // trailing space
+        "$foo",
+        "foo$",
+        "foo.$.bar",
+        "foo..bar",
+        ".foo",
+        "foo.",
+        "foo.>.bar",
+        ">foo",
+        "foo>bar",
+        "foo.>bar",
+        "foo.bar.>.",
+        "foo bar",
+        "foo/bar",
+        "foo#bar",
+        "",
+        " ",
+        "..",
+        ".>",
+        "foo..",
+        ".",
+        ">.",
+        "foo,baz",
+        "αbeta",
+        "foo|bar",
+        "foo;bar",
+        "foo:bar",
+        "foo%bar",
+        "foo.*.>.bar",
+        "foo.*.>.",
+        "foo.*..bar",
+        "foo.>.bar",
+        "foo>"
     ];
         
     unreservedInvalidTopics.forEach(topic => {
@@ -487,40 +489,41 @@ test("Test isTopicValidMethod()", () => {
     });
 
     var unreservedValidTopics = [
-        'Orders',
-        'customer_123',
-        'foo-bar',
-        'a,b,c',
-        '*',
-        'foo>*',
-        'hello$world',
-        'topic.123',
-        'ABC_def-ghi',
-        'data_stream_2025',
-        'NODE*',
-        'pubsub>events',
-        'log,metric,error',
-        'X123_Y456',
-        'multi.step.topic',
-        'batch-process',
-        'sensor1_data',
-        'finance$Q2',
-        'alpha,beta,gamma',
-        'Z9_Y8-X7',
-        'config>*',
-        'route-map',
-        'STATS_2025-07',
-        'msg_queue*',
-        'update>patch',
-        'pipeline_v2',
-        'FOO$BAR$BAZ',
-        'user.profile',
-        'id_001-xyz',
-        'event_queue>'
+        "foo",
+        "foo.bar",
+        "foo.bar.baz",
+        "*",
+        "foo.*",
+        "*.bar",
+        "foo.*.baz",
+        ">",
+        "foo.>",
+        "foo.bar.>",
+        "*.*.>",
+        "alpha_beta",
+        "alpha-beta",
+        "alpha~beta",
+        "abc123",
+        "123abc",
+        "~",
+        "alpha.*.>",
+        "alpha.*",
+        "alpha.*.*",
+        "-foo",
+        "foo_bar-baz~qux",
+        "A.B.C",
+        "sensor.temperature",
+        "metric.cpu.load",
+        "foo.*.*",
+        "foo.*.>",
+        "foo_bar.*",
+        "*.*",
+        "metrics.>"
     ]; 
 
     unreservedValidTopics.forEach(topic => {
         var valid = realTimeEnabled.isTopicValid(topic);
+        console.log(topic)
         assert.strictEqual(valid, true);
     });
 });
@@ -579,4 +582,77 @@ test("History test", async () => {
     },
     new Error("$start must be a Date object"),
     "Expected error was not thrown");
+})
+
+test("Pattern matcher test", async () => {
+    var cases = [
+        ["foo",                 "foo",                      true],   // 1
+        ["foo",                 "bar",                      false],  // 2
+        ["foo.*",               "foo.bar",                  true],   // 3
+        ["foo.bar",             "foo.*",                    true],   // 4
+        ["*",                   "token",                    true],   // 5
+        ["*",                   "*",                        true],   // 6
+        ["foo.*",               "foo.bar.baz",              false],  // 7
+        ["foo.>",               "foo.bar.baz",              true],   // 8
+        ["foo.>",               "foo",                      false],  // 9  (zero‑token '>' now invalid)
+        ["foo.bar.baz",         "foo.>",                    true],   // 10
+        ["foo.bar.>",           "foo.bar",                  false],  // 11
+        ["foo",                 "foo.>",                    false],  // 12
+        ["foo.*.>",             "foo.bar.baz.qux",          true],   // 13
+        ["foo.*.baz",           "foo.bar.>",                true],   // 14
+        ["alpha.*",             "beta.gamma",               false],  // 15
+        ["alpha.beta",          "alpha.*.*",                false],  // 16
+        ["foo.>.bar",           "foo.any.bar",              false],  // 17  ('>' mid‑pattern)
+        [">",                   "foo.bar",                  true],   // 18
+        [">",                   ">",                        true],   // 19
+        ["*",                   ">",                        true],   // 20
+        ["*.>",                 "foo.bar",                  true],   // 21
+        ["*.*.*",               "a.b.c",                    true],   // 22
+        ["*.*.*",               "a.b",                      false],  // 23
+        ["a.b.c.d.e",           "a.b.c.d.e",                true],   // 24
+        ["a.b.c.d.e",           "a.b.c.d.f",                false],  // 25
+        ["a.b.*.d",             "a.b.c.d",                  true],   // 26
+        ["a.b.*.d",             "a.b.c.e",                  false],  // 27
+        ["a.b.>",               "a.b",                      false],  // 28
+        ["a.b",                 "a.b.c.d.>",               false],  // 29
+        ["a.b.>.c",             "a.b.x.c",                  false],  // 30
+        ["a.*.*",               "a.b",                      false],  // 31
+        ["a.*",                 "a.b.c",                    false],  // 32
+        ["metrics.cpu.load",    "metrics.*.load",           true],   // 33
+        ["metrics.cpu.load",    "metrics.cpu.*",            true],   // 34
+        ["metrics.cpu.load",    "metrics.>.load",           false],  // 35
+        ["metrics.>",           "metrics",                  false],  // 36
+        ["metrics.>",           "othermetrics.cpu",         false],  // 37
+        ["*.*.>",               "a.b",                      false],  // 38
+        ["*.*.>",               "a.b.c.d",                  true],   // 39
+        ["a.b.c",               "*.*.*",                    true],   // 40
+        ["a.b.c",               "*.*",                      false],  // 41
+        ["alpha.*.>",           "alpha",                    false],  // 42
+        ["alpha.*.>",           "alpha.beta",               false],  // 43
+        ["alpha.*.>",           "alpha.beta.gamma",         true],   // 44
+        ["alpha.*.>",           "beta.alpha.gamma",         false],  // 45
+        ["foo-bar_baz",         "foo-bar_baz",              true],   // 46
+        ["foo-bar_*",           "foo-bar_123",              false],  // 47 ( '*' here is literal )
+        ["foo-bar_*",           "foo-bar_*",                true],   // 48
+        ["order-*",             "order-123",                false],  // 49
+        ["hello.hey.*",         "hello.hey.>",              true]    // 50
+    ];
+
+    var realtime = new Realtime({
+        api_key: process.env.AUTH_JWT,
+        secret: process.env.AUTH_SECRET
+    });
+
+    var patternMatcher = realtime.testPatternMatcher();
+
+    cases.forEach(testCase => {
+        var tokenA = testCase[0];
+        var tokenB = testCase[1];
+        var expectedResult = testCase[2];
+
+        console.log(`${tokenA}  ⇆  ${tokenB}  → ${expectedResult}`)
+
+        var result = patternMatcher(tokenA, tokenB)
+        assert.strictEqual(expectedResult, result)
+    });
 })
