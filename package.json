@@ -1,6 +1,6 @@
 {
   "name": "relayx-webjs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A powerful library for integrating real-time communication into your webapps, powered by the Relay Network.",
   "main": "realtime/realtime.js",
   "type": "module",
