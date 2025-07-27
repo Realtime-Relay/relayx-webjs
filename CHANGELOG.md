@@ -1,3 +1,6 @@
+V1.0.5
+- Removed DNS testing code
+
 V1.0.4
 - Removed DNS Spoofing for testing
 
