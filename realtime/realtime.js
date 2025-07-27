@@ -115,27 +115,23 @@ export class Realtime {
         this.staging = staging; 
         this.opts = opts;
 
-        if(process.env.PROXY){
-            this.#baseUrl = ["wss://api2.relay-x.io:8666"];
-        }else{
-            if (staging !== undefined || staging !== null){
-                this.#baseUrl = staging ? [
-                    "nats://0.0.0.0:4421",
-                    "nats://0.0.0.0:4422",
-                    "nats://0.0.0.0:4423"
-                    ] : 
-                    [
-                        `wss://api.relay-x.io:4421`,
-                        `wss://api.relay-x.io:4422`,
-                        `wss://api.relay-x.io:4423`
-                    ];
-            }else{
-                this.#baseUrl = [
+        if (staging !== undefined || staging !== null){
+            this.#baseUrl = staging ? [
+                "nats://0.0.0.0:4421",
+                "nats://0.0.0.0:4422",
+                "nats://0.0.0.0:4423"
+                ] : 
+                [
                     `wss://api.relay-x.io:4421`,
                     `wss://api.relay-x.io:4422`,
                     `wss://api.relay-x.io:4423`
                 ];
-            }
+        }else{
+            this.#baseUrl = [
+                `wss://api.relay-x.io:4421`,
+                `wss://api.relay-x.io:4422`,
+                `wss://api.relay-x.io:4423`
+            ];
         }
 
         this.#log(this.#baseUrl);
