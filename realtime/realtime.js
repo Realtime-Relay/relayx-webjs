@@ -2,7 +2,6 @@ import { connect, JSONCodec, Events, DebugEvents, AckPolicy, ReplayPolicy, creds
 import { DeliverPolicy, jetstream } from "@nats-io/jetstream";
 import { encode, decode } from "@msgpack/msgpack";
 import { v4 as uuidv4 } from 'uuid';
-import { initDNSSpoof } from "./dns_change.js";
 
 export class Realtime {
 
@@ -118,7 +117,6 @@ export class Realtime {
 
         if(process.env.PROXY){
             this.#baseUrl = ["wss://api2.relay-x.io:8666"];
-            initDNSSpoof();
         }else{
             if (staging !== undefined || staging !== null){
                 this.#baseUrl = staging ? [
