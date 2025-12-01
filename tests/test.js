@@ -10,7 +10,7 @@ before(async () => {
         api_key: process.env.AUTH_JWT,
         secret: process.env.AUTH_SECRET
     });
-    await realTimeEnabled.init(false, {
+    await realTimeEnabled.init(true, {
         debug: true
     });
     await realTimeEnabled.connect();

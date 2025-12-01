@@ -2,6 +2,8 @@ import { connect, JSONCodec, Events, DebugEvents, AckPolicy, ReplayPolicy, creds
 import { DeliverPolicy, jetstream } from "@nats-io/jetstream";
 import { encode, decode } from "@msgpack/msgpack";
 import { v4 as uuidv4 } from 'uuid';
+import { Queue } from "./queue.js";
+import { ErrorLogging } from "./utils.js";
 
 export class Realtime {
 
@@ -12,6 +14,8 @@ export class Realtime {
     #jetstream = null;
     #consumerMap = {};
     #consumer = null;
+
+    #errorLogging = null;
 
     #event_func = {}; 
     #topicMap = []; 
@@ -78,6 +82,8 @@ export class Realtime {
          * @param{Object} opts - Library configuration options
          */
         var len = arguments.length;
+
+        this.#errorLogging = new ErrorLogging();
 
         if (len > 2){
             new Error("Method takes only 2 variables, " + len + " given");
@@ -199,8 +205,16 @@ export class Realtime {
             this.connected = true;
             this.#connectCalled = true;
         }catch(err){
-            this.#log("ERR")
-            this.#log(err);
+            this.#errorLogging.logError({
+                err: err
+            })
+
+            // Callback on client side
+            if (CONNECTED in this.#event_func){
+                if (this.#event_func[CONNECTED] !== null || this.#event_func[CONNECTED] !== undefined){
+                    this.#event_func[CONNECTED](false)
+                }
+            }
 
             this.connected = false;
         }
@@ -255,7 +269,11 @@ export class Realtime {
                         this.#publishMessagesOnReconnect();
                     break;
                     case Events.Error:
-                        this.#log("client got a permissions error");
+                        if(s.data == "NATS_PROTOCOL_ERR"){
+                            console.log("User kicked off network by account admin!")
+
+                            await this.#natsClient.close();
+                        }
                     break;
                     case DebugEvents.Reconnecting:
                         this.#log("client is attempting to reconnect");
@@ -270,8 +288,6 @@ export class Realtime {
                     case DebugEvents.StaleConnection:
                         this.#log("client has a stale connection");
                     break;
-                    default:
-                        this.#log(`got an unknown status ${s.type}`);
                 }
                 }
             })().then();
@@ -283,7 +299,7 @@ export class Realtime {
             // Callback on client side
             if (CONNECTED in this.#event_func){
                 if (this.#event_func[CONNECTED] !== null || this.#event_func[CONNECTED] !== undefined){
-                    this.#event_func[CONNECTED]()
+                    this.#event_func[CONNECTED](true)
                 }
             }
         }
@@ -441,12 +457,20 @@ export class Realtime {
 
             this.#log(`Publishing to topic => ${this.#getStreamTopic(topic)}`)
     
-            const ack = await this.#jetstream.publish(this.#getStreamTopic(topic), encodedMessage);
-            this.#log(`Publish Ack =>`)
-            this.#log(ack)
-    
-            var latency = Date.now() - start;
-            this.#log(`Latency => ${latency} ms`);
+            var ack = null;
+
+            try{
+                ack = await this.#jetstream.publish(this.#getStreamTopic(topic), encodedMessage);
+                this.#log(`Publish Ack =>`)
+                this.#log(ack)
+        
+                var latency = Date.now() - start;
+                this.#log(`Latency => ${latency} ms`);
+            }catch(err){
+                this.#errorLogging.logError({
+                    err: err
+                })
+            }
 
             return ack !== null && ack !== undefined;
         }else{
@@ -553,6 +577,31 @@ export class Realtime {
         return history;
     }
 
+    // Queue Functions
+    async initQueue(queueID){
+        if(!this.connected){
+            this.#log("Not connected to relayX network. Skipping queue init")
+
+            return;
+        }
+
+        this.#log("Validating queue ID...")
+        if(queueID == undefined || queueID == null || queueID == ""){
+            throw new Error("$queueID cannot be null / undefined / empty!")
+        }
+
+        var queue = new Queue({
+            jetstream: this.#jetstream,
+            nats_client: this.#natsClient,
+            api_key: this.api_key,
+            debug: this.opts?.debug ? this.opts?.debug : false
+        });
+
+        var initResult = await queue.init(queueID);
+
+        return initResult ? queue : null;
+    }
+
     /**
      * Method resends messages when the client successfully connects to the
      * server again
@@ -595,7 +644,7 @@ export class Realtime {
 
         var opts = { 
             name: consumerName,
-            filter_subjects: [this.#getStreamTopic(topic)],
+            filter_subjects: this.#getStreamTopic(topic),
             replay_policy: ReplayPolicy.Instant,
             opt_start_time: new Date(),
             ack_policy: AckPolicy.Explicit,
@@ -603,7 +652,6 @@ export class Realtime {
         }
 
         const consumer = await this.#jetstream.consumers.get(this.#getStreamName(), opts);
-        this.#log(this.#topicMap)
 
         this.#consumerMap[topic] = consumer;
 
@@ -641,7 +689,7 @@ export class Realtime {
                 }
             }
         });
-        this.#log("Consumer is consuming");
+        this.#log(`Consumer is consuming for => ${topic}`);
     }
 
     /**

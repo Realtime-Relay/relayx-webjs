@@ -5,7 +5,8 @@
   "main": "realtime/realtime.js",
   "type": "module",
   "scripts": {
-    "test": "NODE_ENV=test node tests/test.js"
+    "test": "NODE_ENV=test node tests/test.js",
+    "test:queue": "NODE_ENV=test node tests/test_queue.js"
   },
   "repository": {
     "type": "git",
