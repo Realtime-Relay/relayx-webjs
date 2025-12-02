@@ -582,7 +582,7 @@ export class Realtime {
         if(!this.connected){
             this.#log("Not connected to relayX network. Skipping queue init")
 
-            return;
+            return null;
         }
 
         this.#log("Validating queue ID...")
@@ -901,20 +901,7 @@ export class Realtime {
         while (i < a.length || j < b.length) {
             const tokA = a[i];
             const tokB = b[j];
-
-            /*──────────── literal match or single‑token wildcard on either side ────────────*/
-            const singleWildcard =
-            (tokA === "*" && j < b.length) ||
-            (tokB === "*" && i < a.length);
-
-            if (
-            (tokA !== undefined && tokA === tokB) ||
-            singleWildcard
-            ) {
-            i++; j++;
-            continue;
-            }
-
+            
             /*────────────────── multi‑token wildcard ">" — must be **final** ───────────────*/
             if (tokA === ">") {
             if (i !== a.length - 1) return false;   // '>' not in last position → invalid
@@ -928,6 +915,19 @@ export class Realtime {
             if (i >= a.length)      return false;
             starBi = j++;
             starBj = ++i;
+            continue;
+            }
+
+            /*──────────── literal match or single‑token wildcard on either side ────────────*/
+            const singleWildcard =
+            (tokA === "*" && j < b.length) ||
+            (tokB === "*" && i < a.length);
+
+            if (
+            (tokA !== undefined && tokA === tokB) ||
+            singleWildcard
+            ) {
+            i++; j++;
             continue;
             }
 
