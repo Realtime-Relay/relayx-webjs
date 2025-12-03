@@ -24,11 +24,12 @@ export class ErrorLogging {
             var code = err.code;
             var chainedError = err.chainedError;
             var permissionContext = err.permissionContext;
+            var userOp = data.op;
 
             if(code == "PERMISSIONS_VIOLATION"){
                 var op = permissionContext.operation;
 
-                if(op == "publish"){
+                if(userOp == "publish"){
                     console.table({
                         Event: "Publish Permissions Violation",
                         Description: `User is not permitted to publish on '${data.topic}'`,
@@ -37,7 +38,7 @@ export class ErrorLogging {
                     })
 
                     throw new Error(`User is not permitted to publish on '${data.topic}'`)
-                }else if(op == "subscribe"){
+                }else if(userOp == "subscribe"){
                     console.table({
                         Event: "Subscribe Permissions Violation",
                         Description: `User is not permitted to subscribe to '${data.topic}'`,

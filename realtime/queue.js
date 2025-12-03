@@ -220,7 +220,9 @@ export class Queue {
                 this.#log(`Latency => ${latency} ms`);
             }catch(err){
                 this.#errorLogging.logError({
-                    err: err
+                    err: err,
+                    topic: topic,
+                    op: "publish"
                 })
             }
 
@@ -271,7 +273,15 @@ export class Queue {
 
             if(this.connected){
                 // Connected we need to create a topic in a stream
-                await this.#startConsumer(data);
+                try{
+                    await this.#startConsumer(data);
+                }catch(err){
+                    this.#errorLogging.logError({
+                        err: err,
+                        topic: topic,
+                        op: "subscribe"
+                    })
+                }
             }
         }
     }
@@ -538,6 +548,10 @@ export class Queue {
 
         if(config.topic === null || config.topic === undefined || config.topic == ""){
             throw new Error("$config.topic (subscribe config) cannot be null / undefined")
+        }
+
+        if(config.group === null || config.group === undefined || config.group == ""){
+            throw new Error("$config.group (subscribe config) cannot be null / undefined")
         }
     }
 
