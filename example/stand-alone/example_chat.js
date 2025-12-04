@@ -11,9 +11,12 @@ async function run(){
         api_key: process.env.AUTH_JWT,
         secret: process.env.AUTH_SECRET
     });
-    await realtime.init(true, {
-        max_retries: 2,
-        debug: true
+    await realtime.init({
+        staging: true, 
+        opts: {
+            max_retries: 2,
+            debug: true
+        }
     });
 
     realtime.on(CONNECTED, async () => {
