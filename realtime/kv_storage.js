@@ -77,7 +77,7 @@ export class KVStore{
         this.#validateKey(key)
 
         try{
-            await this.#kvStore.delete(key);
+            await this.#kvStore.purge(key);
         }catch(err){
             // The key delete failed because we don't have permission
             this.#errorLogger.logError({
