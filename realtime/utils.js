@@ -29,7 +29,7 @@ export class ErrorLogging {
                 console.table({
                     Event: "Consumer Manually Deleted!",
                     Description: "Consumer was manually deleted by user using deleteConsumer() or the library equivalent",
-                    "Docs to Solve Issue": "<>"
+                    "Docs to Solve Issue": "https://docs.relay-x.io/docs/detailed_doc/NodeJS/queue_consume#deleting-a-consumer"
                 })
             }
         }
@@ -46,7 +46,7 @@ export class ErrorLogging {
                         Event: "Publish Permissions Violation",
                         Description: `User is not permitted to publish on '${data.topic}'`,
                         Topic: data.topic,
-                        "Docs to Solve Issue": "<>"
+                        "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#messaging--publish-permissions"
                     })
 
                     throw new Error(`User is not permitted to publish on '${data.topic}'`)
@@ -55,7 +55,7 @@ export class ErrorLogging {
                         Event: "Subscribe Permissions Violation",
                         Description: `User is not permitted to subscribe to '${data.topic}'`,
                         Topic: data.topic,
-                        "Docs to Solve Issue": "<>"
+                        "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#messaging--subscribe-permissions"
                     })
 
                     throw new Error(`User is not permitted to subscribe to '${data.topic}'`)
@@ -63,7 +63,7 @@ export class ErrorLogging {
                     console.table({
                         Event: "KV Write Failure",
                         Description: `User is not permitted to write to KV Store`,
-                        "Docs to Solve Issue": "<>"
+                        "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#write-permission"
                     })
 
                     throw new Error(`User is not permitted to write to KV Store`)
@@ -71,7 +71,7 @@ export class ErrorLogging {
                     console.table({
                         Event: "KV Read Failure",
                         Description: `User is not permitted to read from KV Store`,
-                        "Docs to Solve Issue": "<>"
+                        "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#read-permission"
                     })
 
                     throw new Error(`User is not permitted to read from KV Store`)
@@ -79,7 +79,7 @@ export class ErrorLogging {
                     console.table({
                         Event: "KV Key Delete Failure",
                         Description: `User is not permitted to delete key from KV Store`,
-                        "Docs to Solve Issue": "<>"
+                        "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#write-permission"
                     })
 
                     throw new Error(`User is not permitted to delete key from KV Store`)
@@ -88,7 +88,7 @@ export class ErrorLogging {
                 console.table({
                     Event: "Authentication Failure",
                     Description: `User failed to authenticate. Check if API key exists & if it is enabled`,
-                    "Docs to Solve Issue": "<>"
+                    "Docs to Solve Issue": "https://docs.relay-x.io/docs/setup/api_key_permissions#enabling-and-disabling-keys"
                 })
             }
         }
