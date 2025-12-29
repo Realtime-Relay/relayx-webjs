@@ -2,6 +2,9 @@ import { connect, JSONCodec, Events, DebugEvents, AckPolicy, ReplayPolicy, creds
 import { DeliverPolicy, jetstream } from "@nats-io/jetstream";
 import { encode, decode } from "@msgpack/msgpack";
 import { v4 as uuidv4 } from 'uuid';
+import { Queue } from "./queue.js";
+import { ErrorLogging } from "./utils.js";
+import { KVStore } from "./kv_storage.js";
 
 export class Realtime {
 
@@ -12,6 +15,10 @@ export class Realtime {
     #jetstream = null;
     #consumerMap = {};
     #consumer = null;
+
+    #kvStore = null;
+
+    #errorLogging = null;
 
     #event_func = {}; 
     #topicMap = []; 
@@ -71,71 +78,25 @@ export class Realtime {
     /*
     Initializes library with configuration options.
     */
-    async init(staging, opts){
-        /**
-         * Method can take in 2 variables
-         * @param{boolean} staging - Sets URL to staging or production URL
-         * @param{Object} opts - Library configuration options
-         */
-        var len = arguments.length;
+    async init(data){
+        this.#errorLogging = new ErrorLogging();
 
-        if (len > 2){
-            new Error("Method takes only 2 variables, " + len + " given");
-        }
+        this.staging = this.#checkVarOk(data.staging) && typeof data.staging == "boolean" ? data.staging : false; 
+        this.opts = data.opts;
 
-        if (len == 2){
-            if(typeof arguments[0] == "boolean"){
-                staging = arguments[0]; 
-            }else{
-                staging = false;
-            }
-
-            if(arguments[1] instanceof Object){
-                opts = arguments[1];
-            }else{
-                opts = {};
-            }
-        }else if(len == 1){
-            if(arguments[0] instanceof Object){
-                opts = arguments[0];
-                staging = false;
-            }else if(typeof arguments[0] == "boolean"){
-                opts = {};
-                staging = arguments[0];
-                this.#log(staging)
-            }else{
-                opts = {};
-                staging = false
-            }
-        }else{
-            staging = false;
-            opts = {};
-        }
-
-        this.staging = staging; 
-        this.opts = opts;
-
-        if (staging !== undefined || staging !== null){
-            this.#baseUrl = staging ? [
-                "nats://0.0.0.0:4421",
-                "nats://0.0.0.0:4422",
-                "nats://0.0.0.0:4423"
-                ] : 
-                [
-                    `wss://api.relay-x.io:4421`,
-                    `wss://api.relay-x.io:4422`,
-                    `wss://api.relay-x.io:4423`
-                ];
-        }else{
-            this.#baseUrl = [
-                `wss://api.relay-x.io:4421`,
-                `wss://api.relay-x.io:4422`,
-                `wss://api.relay-x.io:4423`
-            ];
-        }
+        this.#baseUrl = this.staging ? [
+                            "nats://0.0.0.0:4421",
+                            "nats://0.0.0.0:4422",
+                            "nats://0.0.0.0:4423"
+                        ] : 
+                        [
+                            `wss://api.relay-x.io:4421`,
+                            `wss://api.relay-x.io:4422`,
+                            `wss://api.relay-x.io:4423`
+                        ];
 
         this.#log(this.#baseUrl);
-        this.#log(opts);
+        this.#log(this.opts);
     }
 
     /**
@@ -199,8 +160,16 @@ export class Realtime {
             this.connected = true;
             this.#connectCalled = true;
         }catch(err){
-            this.#log("ERR")
-            this.#log(err);
+            this.#errorLogging.logError({
+                err: err
+            })
+
+            // Callback on client side
+            if (CONNECTED in this.#event_func){
+                if (this.#event_func[CONNECTED] !== null || this.#event_func[CONNECTED] !== undefined){
+                    this.#event_func[CONNECTED](false)
+                }
+            }
 
             this.connected = false;
         }
@@ -255,7 +224,11 @@ export class Realtime {
                         this.#publishMessagesOnReconnect();
                     break;
                     case Events.Error:
-                        this.#log("client got a permissions error");
+                        if(s.data == "NATS_PROTOCOL_ERR"){
+                            console.log("User kicked off network by account admin!")
+
+                            await this.#natsClient.close();
+                        }
                     break;
                     case DebugEvents.Reconnecting:
                         this.#log("client is attempting to reconnect");
@@ -270,8 +243,6 @@ export class Realtime {
                     case DebugEvents.StaleConnection:
                         this.#log("client has a stale connection");
                     break;
-                    default:
-                        this.#log(`got an unknown status ${s.type}`);
                 }
                 }
             })().then();
@@ -283,7 +254,7 @@ export class Realtime {
             // Callback on client side
             if (CONNECTED in this.#event_func){
                 if (this.#event_func[CONNECTED] !== null || this.#event_func[CONNECTED] !== undefined){
-                    this.#event_func[CONNECTED]()
+                    this.#event_func[CONNECTED](true)
                 }
             }
         }
@@ -314,7 +285,15 @@ export class Realtime {
     async #subscribeToTopics(){
         this.#topicMap.forEach(async (topic) => {
             // Subscribe to stream
-            await this.#startConsumer(topic); 
+            try{
+                await this.#startConsumer(topic); 
+            }catch(err){
+                this.#errorLogging.logError({
+                    err: err,
+                    topic: topic,
+                    op: "subscribe"
+                })
+            }
         });
     }
     
@@ -389,7 +368,15 @@ export class Realtime {
 
             if(this.connected){
                 // Connected we need to create a topic in a stream
-                await this.#startConsumer(topic);
+                try{
+                    await this.#startConsumer(topic); 
+                }catch(err){
+                    this.#errorLogging.logError({
+                        err: err,
+                        topic: topic,
+                        op: "subscribe"
+                    })
+                }
             }
         }
 
@@ -441,12 +428,22 @@ export class Realtime {
 
             this.#log(`Publishing to topic => ${this.#getStreamTopic(topic)}`)
     
-            const ack = await this.#jetstream.publish(this.#getStreamTopic(topic), encodedMessage);
-            this.#log(`Publish Ack =>`)
-            this.#log(ack)
-    
-            var latency = Date.now() - start;
-            this.#log(`Latency => ${latency} ms`);
+            var ack = null;
+
+            try{
+                ack = await this.#jetstream.publish(this.#getStreamTopic(topic), encodedMessage);
+                this.#log(`Publish Ack =>`)
+                this.#log(ack)
+        
+                var latency = Date.now() - start;
+                this.#log(`Latency => ${latency} ms`);
+            }catch(err){
+                this.#errorLogging.logError({
+                    err: err,
+                    topic: topic,
+                    op: "publish"
+                })
+            }
 
             return ack !== null && ack !== undefined;
         }else{
@@ -553,6 +550,51 @@ export class Realtime {
         return history;
     }
 
+    // Queue Functions
+    async initQueue(queueID){
+        if(!this.connected){
+            this.#log("Not connected to relayX network. Skipping queue init")
+
+            return null;
+        }
+
+        this.#log("Validating queue ID...")
+        if(queueID == undefined || queueID == null || queueID == ""){
+            throw new Error("$queueID cannot be null / undefined / empty!")
+        }
+
+        var queue = new Queue({
+            jetstream: this.#jetstream,
+            nats_client: this.#natsClient,
+            api_key: this.api_key,
+            debug: this.opts?.debug ? this.opts?.debug : false
+        });
+
+        var initResult = await queue.init(queueID);
+
+        return initResult ? queue : null;
+    }
+
+    // KV Functions
+    async initKVStore(){
+
+        if(this.#kvStore == null){
+            var debugCheck = this.opts.debug !== null && this.opts.debug !== undefined && typeof this.opts.debug == "boolean"
+
+            this.#kvStore = new KVStore({
+                namespace: this.namespace,
+                jetstream: this.#jetstream,
+                debug: debugCheck ? this.opts.debug : false
+            })
+
+            var init = await this.#kvStore.init()
+
+            return init ? this.#kvStore : null;
+        }else{
+            return this.#kvStore
+        }
+    }
+
     /**
      * Method resends messages when the client successfully connects to the
      * server again
@@ -595,7 +637,7 @@ export class Realtime {
 
         var opts = { 
             name: consumerName,
-            filter_subjects: [this.#getStreamTopic(topic)],
+            filter_subjects: this.#getStreamTopic(topic),
             replay_policy: ReplayPolicy.Instant,
             opt_start_time: new Date(),
             ack_policy: AckPolicy.Explicit,
@@ -603,7 +645,6 @@ export class Realtime {
         }
 
         const consumer = await this.#jetstream.consumers.get(this.#getStreamName(), opts);
-        this.#log(this.#topicMap)
 
         this.#consumerMap[topic] = consumer;
 
@@ -641,7 +682,7 @@ export class Realtime {
                 }
             }
         });
-        this.#log("Consumer is consuming");
+        this.#log(`Consumer is consuming for => ${topic}`);
     }
 
     /**
@@ -712,6 +753,10 @@ export class Realtime {
     // Utility functions
     #getClientId(){
         return this.#natsClient?.info?.client_id
+    }
+
+    #checkVarOk(variable){
+        return variable !== null && variable !== undefined
     }
 
     async #pushLatencyData(data){
@@ -853,20 +898,7 @@ export class Realtime {
         while (i < a.length || j < b.length) {
             const tokA = a[i];
             const tokB = b[j];
-
-            /*──────────── literal match or single‑token wildcard on either side ────────────*/
-            const singleWildcard =
-            (tokA === "*" && j < b.length) ||
-            (tokB === "*" && i < a.length);
-
-            if (
-            (tokA !== undefined && tokA === tokB) ||
-            singleWildcard
-            ) {
-            i++; j++;
-            continue;
-            }
-
+            
             /*────────────────── multi‑token wildcard ">" — must be **final** ───────────────*/
             if (tokA === ">") {
             if (i !== a.length - 1) return false;   // '>' not in last position → invalid
@@ -880,6 +912,19 @@ export class Realtime {
             if (i >= a.length)      return false;
             starBi = j++;
             starBj = ++i;
+            continue;
+            }
+
+            /*──────────── literal match or single‑token wildcard on either side ────────────*/
+            const singleWildcard =
+            (tokA === "*" && j < b.length) ||
+            (tokB === "*" && i < a.length);
+
+            if (
+            (tokA !== undefined && tokA === tokB) ||
+            singleWildcard
+            ) {
+            i++; j++;
             continue;
             }
 
@@ -1042,6 +1087,14 @@ ${secret}
     testPatternMatcher(){
         if(process.env.NODE_ENV == "test"){
             return this.#topicPatternMatcher.bind(this)
+        }else{
+            return null;
+        }
+    }
+
+    testGetJetstream(){
+        if(process.env.NODE_ENV == "test"){
+            return this.#jetstream;
         }else{
             return null;
         }
