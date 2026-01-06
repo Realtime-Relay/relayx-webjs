@@ -81,8 +81,8 @@ export class Realtime {
     async init(data){
         this.#errorLogging = new ErrorLogging();
 
-        this.staging = this.#checkVarOk(data.staging) && typeof data.staging == "boolean" ? data.staging : false; 
-        this.opts = data.opts;
+        this.staging = this.#checkVarOk(data?.staging) && typeof data?.staging == "boolean" ? data.staging : false; 
+        this.opts = this.#checkVarOk(data?.opts) ? data.opts : {};
 
         this.#baseUrl = this.staging ? [
                             "nats://0.0.0.0:4421",
