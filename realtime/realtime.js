@@ -579,12 +579,12 @@ export class Realtime {
     async initKVStore(){
 
         if(this.#kvStore == null){
-            var debugCheck = this.opts.debug !== null && this.opts.debug !== undefined && typeof this.opts.debug == "boolean"
+            var debugCheck = this.opts?.debug !== null && this.opts?.debug !== undefined && typeof this.opts?.debug == "boolean"
 
             this.#kvStore = new KVStore({
                 namespace: this.namespace,
                 jetstream: this.#jetstream,
-                debug: debugCheck ? this.opts.debug : false
+                debug: debugCheck ? this.opts?.debug : false
             })
 
             var init = await this.#kvStore.init()
@@ -958,8 +958,8 @@ export class Realtime {
     #getPublishRetry(){
         this.#log(this.opts)
         if(this.opts !== null && this.opts !== undefined){
-            if(this.opts.max_retries !== null && this.opts.max_retries !== undefined){
-                if (this.opts.max_retries <= 0){
+            if(this.opts?.max_retries !== null && this.opts?.max_retries !== undefined){
+                if (this.opts?.max_retries <= 0){
                     return this.#maxPublishRetries; 
                 }else{
                     return this.opts.max_retries;
