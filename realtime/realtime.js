@@ -503,7 +503,7 @@ export class Realtime {
 
         var opts = { 
             name: `webjs_${topic}_${uuidv4()}_history_consumer`,
-            filter_subjects: [this.#getStreamTopic(topic)],
+            filter_subjects: this.#getStreamTopic(topic),
             replay_policy: ReplayPolicy.Instant,
             opt_start_time: start,
             delivery_policy: DeliverPolicy.StartTime,
